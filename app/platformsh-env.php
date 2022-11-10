@@ -25,6 +25,7 @@ function mapPlatformShEnvironmentVariables() : void
     // Map services as feasible.
     mapPlatformShPostgreDatabase('postgre', $config);
     mapPlatformShElasticSearch('elasticsearch', $config);
+    mapAdminAppUrl($config);
 }
 
 function mapPlatformShPostgreDatabase(string $relationshipName, Config $config) : void
@@ -56,4 +57,47 @@ function mapPlatformShElasticSearch(string $relationshipName, Config $config) : 
     setEnvVar('ELASTIC_USER', $credentials['username']);
     setEnvVar('ELASTIC_PASS', $credentials['password']);
     setEnvVar('ELASTIC_SCHEME', $credentials['scheme']);
+}
+
+function mapAdminAppUrl(Config $config) : void
+{
+    // If the ADMIN_APP_URL is already set, leave it be.
+   /* if (getenv('ADMIN_APP_URL')) {
+        return;
+    }
+
+    // If not on Platform.sh, say in a local dev environment, simply
+    // do nothing.  Users need to set the host pattern themselves
+    // in a .env file.
+    if (!$config->inRuntime()) {
+        return;
+    }*/
+
+    $routes = $config->getUpstreamRoutes($config->applicationName);
+
+    if (!count($routes)) {
+        return;
+    }
+
+    $requestUrl = chr(0);
+    if (isset($_SERVER['SERVER_NAME'])) {
+        $requestUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https://' : 'http://')
+            . $_SERVER['SERVER_NAME'];
+    }
+
+    usort($routes, function (array $a, array $b) use ($requestUrl) {
+        // false sorts before true, normally, so negate the comparison.
+        return
+            [strpos($a['url'], $requestUrl) !== 0, !$a['primary'], strpos($a['url'], 'https://') !== 0, strlen($a['url'])]
+            <=>
+            [strpos($b['url'], $requestUrl) !== 0, !$b['primary'], strpos($b['url'], 'https://') !== 0, strlen($b['url'])];
+    });
+
+    $url = reset($routes)['url'];
+
+    // if first element of the url is admin (subdomain), set the url as ADMIN_APP_URL
+    if ('admin' === explode('.', $url)[0])
+    {
+        setEnvVar('ADMIN_APP_URL', $url);
+    }
 }
